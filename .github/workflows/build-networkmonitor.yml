@@ -1,0 +1,50 @@
+
+name: Build NetworkMonitor RootHide
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - "NetworkMonitor/**"
+      - ".github/workflows/build-networkmonitor.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Theos
+        uses: iossxx/theos-action@v1
+        with:
+          theos-dir: theos
+          theos-src: https://github.com/roothide/theos
+          theos-sdks: https://github.com/theos/sdks
+          theos-sdks-branch: master
+
+      - name: Build package
+        working-directory: NetworkMonitor
+        env:
+          THEOS: ${{ github.workspace }}/theos
+          THEOS_PACKAGE_SCHEME: roothide
+        run: |
+          set -euo pipefail
+          make clean
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
+          ls -lh packages/*.deb
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetworkMonitor-RootHide-deb
+          path: NetworkMonitor/packages/*.deb
+          if-no-files-found: error
+          retention-days: 14
+          
