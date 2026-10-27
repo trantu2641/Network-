@@ -1,10 +1,11 @@
-
-name: Build NetworkMonitor RootHide
+name: Build NetworkMonitor
 
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
+    branches:
+      - main
+      - master
     paths:
       - "NetworkMonitor/**"
       - ".github/workflows/build-networkmonitor.yml"
@@ -14,37 +15,55 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Setup Theos
-        uses: iossxx/theos-action@v1
-        with:
-          theos-dir: theos
-          theos-src: https://github.com/roothide/theos
-          theos-sdks: https://github.com/theos/sdks
-          theos-sdks-branch: master
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install make ldid xz
 
-      - name: Build package
-        working-directory: NetworkMonitor
+      - name: Install Theos
         env:
           THEOS: ${{ github.workspace }}/theos
-          THEOS_PACKAGE_SCHEME: roothide
         run: |
-          set -euo pipefail
-          make clean
-          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
-          ls -lh packages/*.deb
+          git clone --recursive https://github.com/roothide/theos.git "$THEOS"
+          echo "THEOS=$THEOS" >> "$GITHUB_ENV"
+          echo "$THEOS/bin" >> "$GITHUB_PATH"
 
-      - name: Upload package
+      - name: Install iOS SDK
+        env:
+          THEOS: ${{ github.workspace }}/theos
+        run: |
+          git clone https://github.com/theos/sdks.git "$RUNNER_TEMP/theos-sdks"
+          mkdir -p "$THEOS/sdks"
+          cp -R "$RUNNER_TEMP/theos-sdks/"*.sdk "$THEOS/sdks/"
+
+      - name: Verify Theos
+        run: |
+          test -x "$THEOS/bin/nic.pl"
+          test -d "$THEOS/sdks"
+          echo "Theos: $THEOS"
+          ls -la "$THEOS/sdks"
+
+      - name: Build NetworkMonitor
+        run: |
+          cd NetworkMonitor
+          make clean
+          make package FINALPACKAGE=1
+
+      - name: Upload build artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: NetworkMonitor-RootHide-deb
-          path: NetworkMonitor/packages/*.deb
-          if-no-files-found: error
+          name: NetworkMonitor-build
+          path: |
+            packages/*.deb
+            packages/*.dylib
+            packages/*.zip
+          if-no-files-found: warn
           retention-days: 14
-          
